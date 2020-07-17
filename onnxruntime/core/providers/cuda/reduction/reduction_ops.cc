@@ -384,6 +384,8 @@ static Status ReduceComputeCore(CUDAExecutionProvider& cuda_ep, const Tensor& in
                                 const std::vector<int64_t>& axes,
                                 bool calculate_log, bool calculate_sqt, bool log_sum_exp, bool fast_reduction,
                                 const TensorShape* input_shape_override = nullptr) {
+
+
   typedef typename ToCudaType<T>::MappedType CudaT;
   const TensorShape& input_shape = input_shape_override ? *input_shape_override : input.Shape();
 
@@ -434,8 +436,9 @@ static Status ReduceComputeCore(CUDAExecutionProvider& cuda_ep, const Tensor& in
   }
 
   CudnnReduceDescriptor reduce_desc;
-  if (std::is_same<T, MLFloat16>::value)
+  if (std::is_same<T, MLFloat16>::value) {
     ORT_RETURN_IF_ERROR(reduce_desc.Set(cudnn_reduce_op, CudnnTensor::GetDataType<float>(), ReduceTensorIndices));
+  }
   else
     ORT_RETURN_IF_ERROR(reduce_desc.Set(cudnn_reduce_op, cudnn_type_X, ReduceTensorIndices));
   const auto one = Consts<CudaT>::One;
@@ -476,7 +479,11 @@ static Status ReduceComputeCore(CUDAExecutionProvider& cuda_ep, const Tensor& in
       } else {
         // Reduce max -- Max/Min will output indices data
         CudnnReduceDescriptor reduce_max_desc;
-        ORT_RETURN_IF_ERROR(reduce_max_desc.Set(CUDNN_REDUCE_TENSOR_MAX, cudnn_type_X, CUDNN_REDUCE_TENSOR_NO_INDICES));
+        cudnnDataType_t cudnn_reduce_max_type = cudnn_type_X;
+        if((std::is_same<T, MLFloat16>::value)) {
+            cudnn_reduce_max_type = CUDNN_DATA_FLOAT;
+        }
+        ORT_RETURN_IF_ERROR(reduce_max_desc.Set(CUDNN_REDUCE_TENSOR_MAX, cudnn_reduce_max_type, CUDNN_REDUCE_TENSOR_NO_INDICES));
         size_t indices_bytes_max = 0;
         CUDNN_RETURN_IF_ERROR(cudnnGetReductionIndicesSize(cuda_ep.PerThreadCudnnHandle(), reduce_max_desc,
                                                            input_tensor, output_tensor, &indices_bytes_max));
